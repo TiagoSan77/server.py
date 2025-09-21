@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, send_from_directory, abort, request, Response
 from pathlib import Path
 import datetime
+from flask_cors import CORS
 import shutil
 import json
 import zipfile
@@ -9,7 +10,7 @@ import os
 
 app = Flask(__name__)
 DESKTOP = Path.home() / "Desktop"
-
+CORS(app)
 @app.route("/", methods=["GET"])
 def index():
     """Interface web simples para gerenciar arquivos"""
@@ -724,10 +725,14 @@ if __name__ == "__main__":
     import logging
     import os
     
-    # Verificar se deve executar em modo silencioso
-    silent_mode = '--silent' in sys.argv or '--no-console' in sys.argv
+    # Para deploy na Render e outros serviços
+    port = int(os.environ.get('PORT', 5000))
+    host = '0.0.0.0'
     
-    if silent_mode:
+    # Verificar se deve executar em modo silencioso
+    silent_mode = '--silent' in sys.argv or '--no-console' in sys.argv or os.environ.get('FLASK_ENV') == 'production'
+    
+    if silent_mode or os.environ.get('PORT'):  # Se PORT está definida, provavelmente é deploy
         # Configurar logging para arquivo
         logging.basicConfig(
             filename='server.log',
@@ -736,7 +741,7 @@ if __name__ == "__main__":
         )
         
         # Redirecionar stdout e stderr para arquivos apenas se não estiverem já redirecionados
-        if not os.getenv('PYTHONIOENCODING'):
+        if not os.getenv('PYTHONIOENCODING') and not os.environ.get('PORT'):
             try:
                 sys.stdout = open('server_output.log', 'w', encoding='utf-8')
                 sys.stderr = open('server_error.log', 'w', encoding='utf-8')
@@ -744,10 +749,10 @@ if __name__ == "__main__":
                 pass  # Se falhar, continua normalmente
         
         # Executar sem output de debug
-        app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+        app.run(host=host, port=port, debug=False, use_reloader=False)
     else:
         print("🚀 Servidor iniciando...")
-        print("📍 Acesse: http://127.0.0.1:5000")
+        print(f"📍 Acesse: http://127.0.0.1:{port}")
         print("💡 Para executar sem terminal, use: python server.py --silent")
         print("🛑 Para parar, pressione Ctrl+C")
-        app.run(host="0.0.0.0", port=5000, debug=False)
+        app.run(host=host, port=port, debug=False)
