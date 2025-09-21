@@ -9,8 +9,50 @@ import tempfile
 import os
 
 app = Flask(__name__)
-DESKTOP = Path.home() / "Desktop"
 CORS(app)
+
+# Detectar se está rodando em produção (Render) ou local
+if os.environ.get('PORT') or os.environ.get('RENDER'):
+    # Ambiente de produção - criar storage na nuvem
+    BASE_DIR = Path('./cloud_storage').resolve()
+    BASE_DIR.mkdir(exist_ok=True)
+    
+    # Criar estrutura inicial se não existir
+    (BASE_DIR / 'Documentos').mkdir(exist_ok=True)
+    (BASE_DIR / 'Imagens').mkdir(exist_ok=True)
+    (BASE_DIR / 'Downloads').mkdir(exist_ok=True)
+    
+    # Criar arquivo de boas-vindas se não existir
+    readme_file = BASE_DIR / 'README.txt'
+    if not readme_file.exists():
+        with open(readme_file, 'w', encoding='utf-8') as f:
+            f.write("""🌐 Bem-vindo ao seu Cloud Storage!
+
+📁 Este é seu espaço pessoal na nuvem.
+
+🔧 Como usar:
+- Navegue pelas pastas usando a interface
+- Faça upload de arquivos usando o botão "📤 Upload"
+- Baixe arquivos clicando em "📥 Download"
+- Crie pastas com "📁 Criar Pasta"
+
+💡 Dicas:
+- Use a pasta "Documentos" para textos e PDFs
+- Use a pasta "Imagens" para fotos e gráficos
+- Use a pasta "Downloads" para arquivos temporários
+
+🚀 Desenvolvido com Flask + Python
+""")
+    
+    print(f"📁 Modo CLOUD: Storage disponível em {BASE_DIR}")
+    print(f"📂 Pastas: Documentos, Imagens, Downloads")
+else:
+    # Ambiente local - usar Desktop
+    BASE_DIR = Path.home() / "Desktop"
+    print(f"📁 Modo LOCAL: Acessando {BASE_DIR}")
+
+# Para compatibilidade com código existente
+DESKTOP = BASE_DIR
 @app.route("/", methods=["GET"])
 def index():
     """Interface web simples para gerenciar arquivos"""
@@ -150,6 +192,13 @@ def index():
 <body>
     <div class="container">
         <h1>🗂️ Gerenciador de Arquivos</h1>
+        
+        <!-- Indicador de Modo -->
+        <div class="section" style="background-color: #2d4a7a; border-left: 4px solid #007bff;">
+            <p style="margin: 0; font-weight: bold;">
+                📍 <span id="modeIndicator">Verificando modo...</span>
+            </p>
+        </div>
         
         <!-- LISTAR ARQUIVOS -->
         <div class="section">
@@ -470,8 +519,30 @@ def index():
             document.getElementById('listResult').innerHTML = html;
         }
 
-        // Carregar lista inicial
-        window.onload = () => listarArquivos();
+        // Carregar informações do sistema
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch('/info');
+                const info = await response.json();
+                
+                const indicator = document.getElementById('modeIndicator');
+                if (info.mode === 'cloud') {
+                    indicator.innerHTML = `☁️ Modo CLOUD - ${info.description}`;
+                    indicator.style.color = '#4CAF50';
+                } else {
+                    indicator.innerHTML = `💻 Modo LOCAL - ${info.description}`;
+                    indicator.style.color = '#FF9800';
+                }
+            } catch (error) {
+                document.getElementById('modeIndicator').innerHTML = '❓ Modo desconhecido';
+            }
+        }
+
+        // Carregar lista inicial e informações do sistema
+        window.onload = () => {
+            loadSystemInfo();
+            listarArquivos();
+        };
     </script>
 </body>
 </html>
@@ -516,6 +587,23 @@ def safe_system_target(path: str) -> Path:
             return None
     except:
         return None
+
+# -----------------------
+# Informações do sistema
+# -----------------------
+@app.route("/info", methods=["GET"])
+def system_info():
+    """Retorna informações sobre o modo de operação"""
+    is_cloud = os.environ.get('PORT') or os.environ.get('RENDER')
+    
+    return jsonify({
+        "mode": "cloud" if is_cloud else "local",
+        "base_dir": str(BASE_DIR),
+        "storage_type": "Cloud Storage (Render)" if is_cloud else "Desktop Local",
+        "writable": True,
+        "description": "Armazenamento na nuvem - Faça upload dos seus arquivos!" if is_cloud 
+                      else "Acesso direto aos arquivos do Desktop"
+    })
 
 @app.route("/items", methods=["GET"])
 def listar_desktop():
